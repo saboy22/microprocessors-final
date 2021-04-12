@@ -1,0 +1,1514 @@
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00001 
+                      00002 ;**********************************************************************
+                      00003 ;   This file is a basic code template for object module code         *
+                      00004 ;   generation on the PIC16F877A. This file contains the              *
+                      00005 ;   basic code building blocks to build upon.                         *
+                      00006 ;                                                                     *
+                      00007 ;   Refer to the MPASM User's Guide for additional information on     *
+                      00008 ;   features of the assembler and linker (Document DS33014).          *
+                      00009 ;                                                                     *
+                      00010 ;   Refer to the respective PIC data sheet for additional             *
+                      00011 ;   information on the instruction set.                               *
+                      00012 ;                                                                     *
+                      00013 ;**********************************************************************
+                      00014 ;                                                                     *
+                      00015 ;    Filename: final.asm                                              *
+                      00016 ;    Date: 12/06/2019                                                 *
+                      00017 ;    File Version: finished version 1.0                               *                   
+                      00018 ;                                                                     *
+                      00019 ;    Author: Samuel Boyle                                             *
+                      00020 ;    Company: CPE 303                                                 *
+                      00021 ;                                                                     * 
+                      00022 ;                                                                     *
+                      00023 ;**********************************************************************
+                      00024 ;                                                                     *
+                      00025 ;    Files required: P16F877A.INC                                     *
+                      00026 ;                                                                     *
+                      00027 ;                                                                     *
+                      00028 ;                                                                     *
+                      00029 ;**********************************************************************
+                      00030 ;                                                                     *
+                      00031 ;    Notes:   Run a motor with a keypad and it will display the       *                          
+                      00032 ;      rpms and it will change rpm based upon which value you enter   *                                 
+                                                       
+                      00033 ;                                                                     *
+                      00034 ;                                                                     *
+                      00035 ;                                                                     *
+                      00036 ;**********************************************************************
+                      00037 
+                      00038 
+                      00039     list        p=16f877a   ; list directive to define processor
+                      00040     #include    <p16f877a.inc>  ; processor specific variable definitions
+                      00001         LIST
+                      00002 
+                      00003 ;==========================================================================
+                      00004 ; Build date : Mar 17 2019
+                      00005 ;  MPASM PIC16F877A processor include
+                      00006 ; 
+                      00007 ;  (c) Copyright 1999-2019 Microchip Technology, All rights reserved
+                      00008 ;==========================================================================
+                      00009 
+                      00567         LIST
+                      00041     
+2007   3732           00042   __CONFIG _CP_OFF & _WDT_OFF & _BODEN_OFF & _PWRTE_ON & _HS_OSC & _WRT_OFF & _LVP_OFF & _CPD_OFF & _DEB
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                            UG_ON
+                      00043 
+                      00044 ; '__CONFIG' directive is used to embed configuration data within .asm file.
+                      00045 ; The labels following the directive are located in the respective .inc file.
+                      00046 ; See respective data sheet for additional information on configuration word.
+                      00047 
+                      00048 ;***** VARIABLE DEFINITIONS 
+                      00049   
+                      00050 ;###################EXTERN######################
+  0000                00051  extern LCDInit
+  0000                00052  extern temp_wr
+  0000                00053  extern iwrite
+  0000                00054  extern dwrite
+  0000                00055  extern LCDLine_1
+  0000                00056  extern LCDLine_2
+  0000                00057  extern run_motor
+                      00058 
+                      00059 ; Shared Uninitialized Data Section
+                      00060 INT_VAR UDATA_SHR      
+0000                  00061 w_temp RES 1       ; variable used for context saving 
+0001                  00062 status_temp RES 1       ; variable used for context saving
+0002                  00063 pclath_temp RES 1       ; variable used for context saving
+0003                  00064 total_value RES 1 ;the total value used to change motor speed
+0004                  00065 decimal RES 1 ;used
+0005                  00066 hundreds_place RES 1
+0006                  00067 tens_place RES 1
+0007                  00068 ones_place RES 1
+                      00069  
+  0000                00070  GLOBAL total_value
+                      00071 
+                      00072 ;Uninitialized Data Section
+                      00073 TEMP_VAR UDATA           ; explicit address specified is not required
+0000                  00074 val_temp RES 1       ; table counter for keypad
+0001                  00075 col_flag RES 1  ;tells when column is pushed
+0002                  00076 row_flag RES 1 ;tells when row is pushed
+0003                  00077 special_flag RES 1 ;tells when special character is pushed
+0004                  00078 special_press RES 1 ;used to tell when special character is pushed
+0005                  00079 temp_count RES 1 ; for start up letters
+0006                  00080 number_hold RES 1 ;used to temporarily hold a value 
+0007                  00081 pos_count RES 1 ;keeps track position when writing % drive
+0008                  00082 right_value RES 1 ;stores right value of % drive
+0009                  00083 past_right_value RES 1 ;stores the old right value
+000A                  00084 left_value RES 1 ;stores left value of % drive
+000B                  00085 past_left_value RES 1 ;stores the old left value
+000C                  00086 multiply_counter RES 1 ;used to mulitply the left value by 10
+000D                  00087 left_value_multiply RES 1 ;multiplied left value
+000E                  00088 add_value RES 1 ;used to add the left and right value
+000F                  00089 delcntr1 RES 1 ;counter for smaller delay
+0010                  00090 delcntr2 RES 1 ;counter for larger delay
+0011                  00091 h_number RES 1 ;used to store the upper 8 bits of tmr1
+0012                  00092 number RES 1 ;used to store the lower 8 bits of tmr1
+0013                  00093 t_counter RES 1 ; counter for the delay
+0014                  00094 d_flag RES 1 ;flag to test if interrupt happened
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00095 
+                      00096 
+                      00097 ;Overlayed Uninitialized Data Section
+                      00098 ; in this example both variables are assigned the same GPR location by linker
+                      00099 G_DATA UDATA_OVR       ; explicit address can be specified
+0000                  00100 flag RES 2           ; temporary variable (shared locations - G_DATA)
+                      00101 
+                      00102 G_DATA UDATA_OVR   
+0000                  00103 count RES 2           ; temporary variable (shared locations - G_DATA)
+                      00104 
+                      00105 ;**********************************************************************
+                      00106 RESET_VECTOR    CODE    0x0000 ; processor reset vector
+0000   0000           00107     nop                        ; nop for icd
+0001   ???? ????      00108     pagesel start
+0003   2???           00109     goto    start              ; go to beginning of program
+                      00110 
+                      00111 
+                      00112 INT_VECTOR      CODE    0x0004 ; interrupt vector location
+                      00113 
+0004                  00114 INTERRUPT
+                      00115 
+0004   00??           00116     movwf   w_temp          ; save off current W register contents
+0005   0803           00117     movf    STATUS,w        ; move status register into W register
+0006   00??           00118     movwf   status_temp     ; save off contents of STATUS register
+0007   080A           00119     movf    PCLATH,w        ; move pclath register into w register
+0008   00??           00120     movwf   pclath_temp     ; save off contents of PCLATH register
+                      00121 
+0009   3001           00122     movlw 0x01
+000A   ???? ????      00123     banksel d_flag
+000C   00??           00124     movwf d_flag ;move 1 to flag to signal interrupt occured
+000D   1283 1303      00125     banksel INTCON
+000F   110B           00126     bcf INTCON,2 ;clear TMR0 flag
+                      00127 
+0010   08??           00128     movf    pclath_temp,w   ; retrieve copy of PCLATH register
+0011   008A           00129     movwf   PCLATH          ; restore pre-isr PCLATH register contents
+0012   08??           00130     movf    status_temp,w   ; retrieve copy of STATUS register
+0013   0083           00131     movwf   STATUS          ; restore pre-isr STATUS register contents
+0014   0E??           00132     swapf   w_temp,f
+0015   0E??           00133     swapf   w_temp,w        ; restore pre-isr W register contents
+0016   0009           00134     retfie                  ; return from interrupt
+                      00135 
+                      00136 MAIN_PROG       CODE
+                      00137 
+0000                  00138 start
+                      00139 
+0000   0000           00140     nop
+0001   ???? ????      00141     pagesel LCDInit     ;set up PCLATH for sub call
+0003   2???           00142     call LCDInit ; setup the LCD
+                      00143         ;now clear the sceen and set DDRAM to address 0 
+                      00144         ;by executing clear display instruction = 0x01
+0004   ???? ????      00145     banksel temp_wr     ;set up status register for variable write
+0006   3001           00146     movlw 0x01  ;This value can be confirmed in Hitatchi 44780 data sheet
+                      00147                                         
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0007   00??           00148     movwf temp_wr       ;This is a global variable that passes the instruction value
+                      00149                                         ;to i_write
+0008   ???? ????      00150     pagesel iwrite      ;setup PCLATH correctly
+000A   2???           00151     call iwrite
+                      00152 
+000B   300F           00153     movlw 0x0F          ;Display on, cursor on, blink on
+000C   00??           00154     movwf temp_wr
+000D   ???? ????      00155     pagesel iwrite      ;setup PCLATH correctly
+000F   2???           00156     call iwrite
+                      00157       
+0010   ???? ????      00158     banksel temp_count  ;set status register
+0012   01??           00159     clrf temp_count     ;initialize variable
+0013                  00160 loop    
+0013   08??           00161         movf    temp_count,W    ;load working register with table index
+0014   ???? ????      00162         pagesel  Msg_Lookup     ;this asembler directive only uses bsf and bsc so will not destroy Wreg
+0016   2???           00163         call    Msg_Lookup      ;returns character in Wreg
+0017   ???? ????      00164         banksel         temp_wr
+0019   00??           00165         movwf   temp_wr
+001A   08??           00166         movf    temp_wr,F       ;see if the next character to write is the null character
+001B   ???? ????      00167         pagesel ExitLoop        ;pagesel uses bcf and bsf on plcath that does not change state of Z bit
+001D   1903           00168         btfsc   STATUS,Z        ;test to see if null character is returned
+001E   2???           00169         goto    ExitLoop        ;if it is null then exit the loop
+001F   ???? ????      00170         pagesel  dwrite
+0021   2???           00171         call    dwrite          ;write the value in temp_wr to DDRAM in the display 
+0022   ???? ????      00172         banksel  temp_count
+0024   300F           00173         movlw   d'15'
+0025   02??           00174         subwf   temp_count,W ; if the 16 character then skp to the second line
+0026   ???? ????      00175         pagesel         LCDLine_2
+0028   1903           00176         btfsc   STATUS,Z        ;if zero then set cursor to the seond line
+0029   2???           00177         call    LCDLine_2
+Message[305]: Using default destination of 1 (file).
+002A   0A??           00178         incf    temp_count      ;keeps track of the position that is being written.
+002B   ???? ????      00179         pagesel loop    
+002D   2???           00180         goto    loop
+002E                  00181 ExitLoop
+                      00182         
+                      00183         ;moves the cursor to the starting spot on the lcd
+002E   ???? ????      00184         banksel temp_wr
+0030   308D           00185         movlw   0x8D
+0031   00??           00186         movwf   temp_wr
+0032   ???? ????      00187         pagesel iwrite
+0034   2???           00188         call    iwrite
+                      00189         
+                      00190         ; go through and clear out variables before using them
+0035   ???? ????      00191         banksel total_value
+0037   01??           00192         clrf total_value
+0038   ???? ????      00193         pagesel run_motor
+003A   2???           00194         call run_motor
+003B   ???? ????      00195         banksel number_hold
+003D   01??           00196         clrf number_hold
+003E   ???? ????      00197         banksel pos_count
+0040   01??           00198         clrf pos_count
+0041   ???? ????      00199         banksel right_value
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0043   01??           00200         clrf right_value
+0044   ???? ????      00201         banksel left_value
+0046   01??           00202         clrf left_value
+0047   ???? ????      00203         banksel past_right_value
+0049   01??           00204         clrf past_right_value
+004A   ???? ????      00205         banksel past_left_value
+004C   01??           00206         clrf past_left_value
+                      00207         
+                      00208         ;set portc bit 0 as an input so we can count using tmr1
+004D   1683 1303      00209         banksel TRISC
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+004F   1407           00210        bsf TRISC,0
+                      00211        
+                      00212        ;intialize tmr0
+0050   1683 1303      00213        banksel OPTION_REG
+0052   3087           00214         movlw B'10000111'
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0053   0081           00215      movwf OPTION_REG ;set the prescalar to 256
+                      00216    ;turn on timer1, set up rc0 to count in tmr1, don't 
+0054   1283 1303      00217      banksel T1CON
+0056   1410           00218      bsf T1CON,0
+0057   1490           00219      bsf T1CON,1
+0058   1510           00220      bsf T1CON,2
+                      00221         
+                      00222  ;start by checking the input of the columns on the keypad      
+0059                  00223 column
+0059   1683 1303      00224     banksel TRISD
+005B   3007           00225     movlw B'00000111' ;set column 1,2,3 as inputs
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+005C   0088           00226     movwf TRISD
+005D   1283 1303      00227     banksel PORTD 
+005F   ???? ????      00228     pagesel wait5 ;make sure no buttons are held 
+0061   2???           00229     call wait5
+0062   ???? ????      00230     pagesel wait6
+0064   2???           00231     call wait6
+0065   ???? ????      00232     pagesel wait7
+0067   2???           00233     call wait7
+0068   ???? ????      00234     banksel col_flag
+006A   01??           00235     clrf col_flag ;clear flag that tests if column button is pressed
+006B                  00236 delay
+006B   3028           00237     movlw d'40'; load 40 into the delay counter 5e-7s * 256 * 256 * 40 = 1.3 seconds
+006C   ???? ????      00238     banksel t_counter
+006E   00??           00239     movwf t_counter
+006F   1283 1303      00240     banksel TMR0
+0071   0181           00241     clrf TMR0 ;clear tmr0 because we want all 256 loops
+0072   1283 1303      00242     banksel TMR1L
+0074   018E           00243     clrf TMR1L ;reset tmr1 value
+0075   018F           00244     clrf TMR1H
+0076                  00245 del_reset
+0076   ???? ????      00246     banksel d_flag
+0078   01??           00247     clrf d_flag ;clear the flag that tests if interrupt occured
+0079   1283 1303      00248     banksel INTCON ;set up interrupts
+007B   178B           00249     bsf INTCON,7 ;set GIE
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+007C   168B           00250     bsf INTCON,5 ;set tmr0 interrupt
+007D                  00251 del
+007D   1283 1303      00252     banksel PORTD 
+007F   0188           00253     clrf PORTD ;make sure that no previous values are stored in portd b/c it will mess up the keypad
+0080   ???? ????      00254     pagesel col3
+0082   1C08           00255     btfss PORTD,0 ;is column 3 pressed
+0083   2???           00256     call col3
+0084   ???? ????      00257     pagesel col2
+0086   1C88           00258     btfss PORTD,1 ;is column 2 pressed
+0087   2???           00259     call col2
+0088   ???? ????      00260     pagesel col1
+008A   1D08           00261     btfss PORTD,2 ;is colum 1 pressed
+008B   2???           00262     call col1
+008C   ???? ????      00263     banksel col_flag
+008E   ???? ????      00264     pagesel row
+0090   1800           00265     btfsc col_flag,0 ;test if one of the buttons was pressed if yes goto row
+0091   2???           00266     goto row
+0092   ???? ????      00267     banksel d_flag
+0094   ???? ????      00268     pagesel del
+0096   1C00           00269     btfss d_flag,0 ;did the interrupt occur is the flag 1
+0097   2???           00270     goto del ;if not sit here and wait
+0098   ???? ????      00271     banksel t_counter
+009A   ???? ????      00272     pagesel del_reset
+Message[305]: Using default destination of 1 (file).
+009C   0B??           00273     decfsz t_counter ;interrupt occured decrement the delay counter and when it hits 0 return
+009D   2???           00274     goto del_reset
+009E   ???? ????      00275     pagesel rpm
+00A0   2???           00276     goto rpm; when 1.3 seconds occurs then update the number of rpms
+                      00277         
+                      00278        ;load a value of 0 into table counter
+00A1                  00279 col1
+00A1   ???? ????      00280     banksel val_temp
+00A3   01??           00281     clrf val_temp
+00A4   ???? ????      00282     banksel col_flag
+00A6   3001           00283     movlw 0x01
+00A7   00??           00284     movwf col_flag ;indicate when the button is pushed
+00A8   0008           00285     return
+                      00286        
+                      00287        ;load a value of 1 into table counter
+00A9                  00288 col2
+00A9   3001           00289     movlw d'1'
+00AA   ???? ????      00290     banksel val_temp
+00AC   00??           00291     movwf val_temp
+00AD   ???? ????      00292     banksel col_flag
+00AF   3001           00293     movlw 0x01
+00B0   00??           00294     movwf col_flag ;indicate when the button is pushed
+00B1   0008           00295     return
+                      00296        
+                      00297        ;load a value of 2 into table counter
+00B2                  00298 col3
+00B2   3002           00299     movlw d'2'
+00B3   ???? ????      00300     banksel val_temp
+00B5   00??           00301     movwf val_temp
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00B6   ???? ????      00302     banksel col_flag
+00B8   3001           00303     movlw 0x01
+00B9   00??           00304     movwf col_flag ;indicate when the button is pushed
+00BA   0008           00305     return
+                      00306     
+                      00307        ;after checking the columns we will now check the rows for inputs
+00BB                  00308 row
+00BB   1683 1303      00309     banksel TRISD
+00BD   3078           00310     movlw B'01111000';set up the rows as inputs
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00BE   0088           00311     movwf TRISD
+00BF   ???? ????      00312     banksel row_flag
+00C1   01??           00313     clrf row_flag
+00C2                  00314 r_loop
+00C2   1283 1303      00315     banksel PORTD
+00C4   ???? ????      00316     pagesel row1
+00C6   1F08           00317     btfss PORTD,6 ;is row one pressed
+00C7   2???           00318     call row1
+00C8   ???? ????      00319     pagesel row2
+00CA   1E88           00320     btfss PORTD,5 ;is row two pressed
+00CB   2???           00321     call row2
+00CC   ???? ????      00322     pagesel row3
+00CE   1E08           00323     btfss PORTD,4 ;is row three pressed
+00CF   2???           00324     call row3
+00D0   ???? ????      00325     pagesel row4
+00D2   1D88           00326     btfss PORTD,3 ;is row four pressed
+00D3   2???           00327     call row4
+00D4   ???? ????      00328     banksel row_flag
+00D6   ???? ????      00329     pagesel column
+00D8   1800           00330     btfsc row_flag,0
+00D9   2???           00331     goto column
+00DA   ???? ????      00332     pagesel r_loop
+00DC   2???           00333     goto r_loop
+                      00334       
+                      00335       
+                      00336        
+                      00337        ;move table counter value to the working register
+                      00338        ;write to the board
+                      00339        ;wait for the button to be released go back to the start
+00DD                  00340 row1
+00DD   ???? ????      00341     pagesel large_delay
+00DF   2???           00342     call large_delay
+00E0   ???? ????      00343     banksel val_temp
+00E2   08??           00344     movf val_temp,0
+00E3   ???? ????      00345     pagesel keypad_table
+00E5   2???           00346     call keypad_table
+00E6   ???? ????      00347     banksel temp_wr
+00E8   00??           00348     movwf temp_wr
+00E9   ???? ????      00349     banksel number_hold
+00EB   00??           00350     movwf number_hold
+00EC   ???? ????      00351     pagesel lcd_write
+00EE   2???           00352     call lcd_write
+00EF   ???? ????      00353     pagesel wait1
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00F1   2???           00354     call wait1
+00F2   ???? ????      00355     banksel row_flag
+00F4   3001           00356     movlw 0x01
+00F5   00??           00357     movwf row_flag
+00F6   0008           00358     return
+                      00359         
+                      00360         ;add the value of 3 to the table counter to give all numbers in row 2
+                      00361         ;move table counter value to the working register
+                      00362        ;write to the board
+                      00363        ;wait for the button to be released go back to the start
+00F7                  00364 row2
+00F7   ???? ????      00365     pagesel large_delay
+00F9   2???           00366     call large_delay
+00FA   ???? ????      00367     banksel val_temp
+00FC   3003           00368     movlw d'3'
+00FD   07??           00369     addwf val_temp,0
+00FE   ???? ????      00370     pagesel keypad_table
+0100   2???           00371     call keypad_table
+0101   ???? ????      00372     banksel temp_wr
+0103   00??           00373     movwf temp_wr
+0104   ???? ????      00374     banksel number_hold
+0106   00??           00375     movwf number_hold
+0107   ???? ????      00376     pagesel lcd_write
+0109   2???           00377     call lcd_write
+010A   ???? ????      00378     pagesel wait2
+010C   2???           00379     call wait2
+010D   ???? ????      00380     banksel row_flag
+010F   3001           00381     movlw 0x01
+0110   00??           00382     movwf row_flag
+0111   0008           00383     return
+                      00384        
+                      00385         ;add the value of 6 to the table counter to give values in the third row
+                      00386         ;move table counter value to the working register
+                      00387        ;write to the board
+                      00388        ;wait for the button to be released go back to the start
+0112                  00389 row3
+0112   ???? ????      00390     pagesel large_delay
+0114   2???           00391     call large_delay
+0115   ???? ????      00392     banksel val_temp
+0117   3006           00393     movlw d'6'
+0118   07??           00394     addwf val_temp,0
+0119   ???? ????      00395     pagesel keypad_table
+011B   2???           00396     call keypad_table
+011C   ???? ????      00397     banksel temp_wr
+011E   00??           00398     movwf temp_wr
+011F   ???? ????      00399     banksel number_hold
+0121   00??           00400     movwf number_hold
+0122   ???? ????      00401     pagesel lcd_write
+0124   2???           00402     call lcd_write
+0125   ???? ????      00403     pagesel wait3
+0127   2???           00404     call wait3
+0128   ???? ????      00405     banksel row_flag
+012A   3001           00406     movlw 0x01
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+012B   00??           00407     movwf row_flag
+012C   0008           00408     return
+                      00409         
+                      00410         ;add the value of 9 to the table counter to give values in the fourth row
+                      00411         ;move table counter value to the working register
+                      00412        ;write to the board if 0 then either load past value or change motor speed
+                      00413        ;wait for the button to be released go back to the start
+012D                  00414 row4
+012D   ???? ????      00415     pagesel large_delay
+012F   2???           00416     call large_delay
+0130   ???? ????      00417     banksel special_flag
+0132   01??           00418     clrf special_flag ;reset the flag that checks the if a special character is pressed
+0133   ???? ????      00419     banksel special_press
+0135   01??           00420     clrf special_press ;reset the value that checks either star or pound is pressed
+0136   ???? ????      00421     banksel val_temp
+0138   3009           00422     movlw d'9'
+0139   07??           00423     addwf val_temp,0
+013A   ???? ????      00424     pagesel keypad_table
+013C   2???           00425     call keypad_table
+013D   ???? ????      00426     banksel special_press
+013F   00??           00427     movwf special_press
+0140   ???? ????      00428     pagesel enter
+0142   1880           00429     btfsc special_press,1 ;if the value 2 is called back then # was pressed
+0143   2???           00430     call enter
+0144   ???? ????      00431     pagesel star
+0146   1800           00432     btfsc special_press,0 ;if the value of 1 is called back then * was pressed
+0147   2???           00433     call star
+0148   ???? ????      00434     banksel special_flag
+014A   ???? ????      00435     pagesel zero_write
+014C   1C00           00436     btfss special_flag,0 ;if neither button was pressed then 0 was pressed
+014D   2???           00437     call zero_write
+014E   ???? ????      00438     pagesel wait4
+0150   2???           00439     call wait4
+0151   ???? ????      00440     banksel row_flag
+0153   3001           00441     movlw 0x01
+0154   00??           00442     movwf row_flag
+0155   0008           00443     return
+                      00444      
+                      00445 ;take the previous value that was entered to change the motor speed
+                      00446 ;and load it back to the display
+0156                  00447 star
+0156   ???? ????      00448     banksel temp_wr
+0158   308D           00449     movlw 0x8D
+0159   00??           00450     movwf temp_wr
+015A   ???? ????      00451     pagesel iwrite
+015C   2???           00452     call iwrite
+015D   ???? ????      00453     banksel past_left_value
+015F   08??           00454     movf past_left_value,W
+0160   00??           00455     movwf past_left_value
+0161   ???? ????      00456     banksel left_value
+0163   00??           00457     movwf left_value ;load past value entered into left value
+0164   ???? ????      00458     banksel temp_wr
+0166   00??           00459     movwf temp_wr
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0167   1600           00460     bsf temp_wr,4 ;set the upper 4 bits to 0x30 to make it ascii
+0168   1680           00461     bsf temp_wr,5
+0169   ???? ????      00462     pagesel dwrite
+016B   2???           00463     call dwrite
+016C   ???? ????      00464     banksel past_right_value
+016E   08??           00465     movf past_right_value,W
+016F   00??           00466     movwf past_right_value
+0170   ???? ????      00467     banksel right_value
+0172   00??           00468     movwf right_value ;load past value entered into right value
+0173   ???? ????      00469     banksel temp_wr
+0175   00??           00470     movwf temp_wr
+0176   1600           00471     bsf temp_wr,4 ;set the upper 4 bits to 0x30 to make it ascii
+0177   1680           00472     bsf temp_wr,5
+0178   ???? ????      00473     pagesel dwrite
+017A   2???           00474     call dwrite
+017B   308D           00475     movlw 0x8D
+017C   00??           00476     movwf temp_wr
+017D   ???? ????      00477     pagesel iwrite
+017F   2???           00478     call iwrite
+0180   3001           00479     movlw 0x01
+0181   00??           00480     movwf special_flag
+0182   0008           00481     return
+                      00482 
+                      00483 ;take the current value on the lcd and based on that number cause the motor to 
+                      00484 ;spin at that speed
+0183                  00485 enter
+0183   308D           00486     movlw 0x8D
+0184   00??           00487     movwf temp_wr
+0185   ???? ????      00488     pagesel iwrite
+0187   2???           00489     call iwrite
+0188   ???? ????      00490     pagesel total_up ;call a subroutine that will total up the actual value of the 
+018A   2???           00491     call total_up ;left and right value into decimal
+018B   ???? ????      00492     pagesel run_motor
+018D   2???           00493     call run_motor ;will go and set up the tmr2 and pwm so that the motor can spin
+018E   ???? ????      00494     banksel right_value
+0190   08??           00495     movf right_value,0
+0191   ???? ????      00496     banksel past_right_value
+0193   00??           00497     movwf past_right_value ;loads the right value into past right value
+0194   ???? ????      00498     banksel left_value
+0196   08??           00499     movf left_value,0
+0197   ???? ????      00500     banksel past_left_value
+0199   00??           00501     movwf past_left_value ;loads the left value into past left value
+019A   3001           00502     movlw 0x01
+019B   00??           00503     movwf special_flag
+019C   0008           00504     return
+                      00505 
+                      00506 ;used to write the value 0 to the lcd
+019D                  00507 zero_write
+019D   3030           00508     movlw '0'
+019E   ???? ????      00509     banksel number_hold
+01A0   01??           00510     clrf number_hold
+01A1   ???? ????      00511     banksel temp_wr
+01A3   00??           00512     movwf temp_wr
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 11
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+01A4   ???? ????      00513     pagesel lcd_write
+01A6   2???           00514     call lcd_write
+01A7   0008           00515     return
+                      00516       
+                      00517         ;wait for button to be released
+01A8                  00518 wait1
+01A8   1283 1303      00519     banksel PORTD
+01AA   1F08           00520     btfss PORTD,6
+01AB   2???           00521     goto wait1
+01AC   0008           00522     return
+                      00523         
+                      00524         ;wait for button to be released
+01AD                  00525 wait2
+01AD   1283 1303      00526     banksel PORTD
+01AF   1E88           00527     btfss PORTD,5
+01B0   2???           00528     goto wait2
+01B1   0008           00529     return
+                      00530         
+                      00531         ;wait for button to be released
+01B2                  00532 wait3
+01B2   1283 1303      00533     banksel PORTD
+01B4   1E08           00534     btfss PORTD,4
+01B5   2???           00535     goto wait3
+01B6   0008           00536     return
+                      00537         
+                      00538         ;wait for button to be released
+01B7                  00539 wait4
+01B7   1283 1303      00540     banksel PORTD
+01B9   1D88           00541     btfss PORTD,3
+01BA   2???           00542     goto wait4
+01BB   0008           00543     return
+                      00544         
+                      00545     ;wait for button to be released
+01BC                  00546 wait5
+01BC   1283 1303      00547     banksel PORTD
+01BE   1C08           00548     btfss PORTD,0
+01BF   2???           00549     goto wait5
+01C0   0008           00550     return
+                      00551         
+                      00552         ;wait for button to be released
+01C1                  00553 wait6
+01C1   1283 1303      00554     banksel PORTD
+01C3   1C88           00555     btfss PORTD,1
+01C4   2???           00556     goto wait6
+01C5   0008           00557     return
+                      00558         
+                      00559     ;wait for button to be released
+01C6                  00560 wait7
+01C6   1283 1303      00561     banksel PORTD
+01C8   1D08           00562     btfss PORTD,2
+01C9   2???           00563     goto wait7
+01CA   0008           00564     return
+                      00565         
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 12
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00566     ;used to write to the lcd
+01CB                  00567 lcd_write
+01CB   ???? ????      00568     banksel pos_count
+01CD   ???? ????      00569     pagesel lcd_write_left
+01CF   1C00           00570     btfss pos_count,0 ;test to see which position the cursor is in
+01D0   2???           00571     call lcd_write_left ; if pos_count is clear then in left spot
+01D1   ???? ????      00572     pagesel lcd_write_right
+01D3   1800           00573     btfsc pos_count,0 ;if pos_count is set to one then write in right spot
+01D4   2???           00574     goto lcd_write_right
+01D5   3001           00575     movlw 0x01
+01D6   00??           00576     movwf pos_count
+01D7                  00577 lcd_write0
+01D7   0008           00578     return
+                      00579         
+                      00580     ;write a value in the left spot
+01D8                  00581 lcd_write_left
+01D8   ???? ????      00582     pagesel dwrite
+01DA   2???           00583     call dwrite ;write to lcd
+01DB   ???? ????      00584     banksel number_hold
+01DD   1200           00585     bcf number_hold,4 ; convert from ascii to decimal number
+01DE   1280           00586     bcf number_hold,5
+01DF   08??           00587     movf number_hold,0
+01E0   ???? ????      00588     banksel left_value
+01E2   00??           00589     movwf left_value ;load decimal value into left_value
+01E3   0008           00590     return
+                      00591 
+                      00592     ;write a value in right spot
+01E4                  00593 lcd_write_right
+01E4   ???? ????      00594     pagesel dwrite
+01E6   2???           00595     call dwrite ;write to lcd
+01E7   ???? ????      00596     banksel temp_wr
+01E9   308D           00597     movlw 0x8D
+01EA   00??           00598     movwf temp_wr
+01EB   ???? ????      00599     pagesel iwrite
+01ED   2???           00600     call iwrite ; move cursor back to left cursor spot
+01EE   ???? ????      00601     banksel number_hold
+01F0   1200           00602     bcf number_hold,4 ;convert ascii to decimal
+01F1   1280           00603     bcf number_hold,5
+01F2   08??           00604     movf number_hold,0
+01F3   ???? ????      00605     banksel right_value
+01F5   00??           00606     movwf right_value ;load decimal value into right value
+01F6   ???? ????      00607     banksel pos_count
+01F8   01??           00608     clrf pos_count ;clear pos_count to indicate we are in the left spot
+01F9   ???? ????      00609     pagesel lcd_write0
+01FB   2???           00610     goto lcd_write0
+                      00611         
+01FC                  00612 total_up
+01FC   ???? ????      00613     pagesel multiply
+01FE   2???           00614     call multiply
+01FF   ???? ????      00615     banksel left_value_multiply
+0201   08??           00616     movf left_value_multiply,0
+0202   ???? ????      00617     banksel add_value
+0204   00??           00618     movwf add_value
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 13
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0205   ???? ????      00619     banksel right_value
+0207   08??           00620     movf right_value,0
+0208   00??           00621     movwf right_value
+0209   ???? ????      00622     banksel add_value
+020B   07??           00623     addwf add_value,0
+020C   ???? ????      00624     banksel total_value
+020E   00??           00625     movwf total_value
+020F   0008           00626     return
+                      00627         
+0210                  00628 multiply
+0210   ???? ????      00629     banksel left_value_multiply
+0212   01??           00630     clrf left_value_multiply
+0213   300A           00631     movlw 0x0A
+0214   ???? ????      00632     banksel multiply_counter
+0216   00??           00633     movwf multiply_counter
+0217   ???? ????      00634     banksel left_value
+0219   08??           00635     movf left_value,0
+021A   00??           00636     movwf left_value
+021B                  00637 multiply_loop
+021B   ???? ????      00638     banksel left_value_multiply
+021D   07??           00639     addwf left_value_multiply,1
+021E   ???? ????      00640     banksel multiply_counter
+0220   ???? ????      00641     pagesel multiply_loop
+Message[305]: Using default destination of 1 (file).
+0222   0B??           00642     decfsz multiply_counter
+0223   2???           00643     goto multiply_loop
+0224   0008           00644     return
+                      00645         
+0225                  00646 rpm
+0225   1283 1303      00647     banksel TMR1L
+0227   080E           00648     movf TMR1L,0
+0228   ???? ????      00649     banksel number
+022A   00??           00650     movwf number
+022B   1283 1303      00651     banksel TMR1H
+022D   080F           00652     movf TMR1H,0
+022E   ???? ????      00653     banksel h_number
+0230   00??           00654     movwf h_number
+0231   01??           00655     clrf hundreds_place
+0232   01??           00656     clrf tens_place
+0233   01??           00657     clrf ones_place
+0234   01??           00658     clrf decimal
+0235   ???? ????      00659     banksel number
+0237   3005           00660     movlw d'5'
+0238   1800           00661     btfsc number,0
+0239   00??           00662     movwf decimal
+Message[305]: Using default destination of 1 (file).
+023A   0C??           00663     rrf number
+023B   ???? ????      00664     banksel h_number
+023D   ???? ????      00665     pagesel number_high
+023F   1800           00666     btfsc h_number,0
+0240   2???           00667     call number_high
+0241   ???? ????      00668     pagesel hundreds
+0243   2???           00669     call hundreds
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 14
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0244   ???? ????      00670     pagesel tens
+0246   2???           00671     call tens
+0247   ???? ????      00672     pagesel ones
+0249   2???           00673     call ones
+024A   ???? ????      00674     pagesel rpm_write
+024C   2???           00675     call rpm_write
+024D   ???? ????      00676     pagesel column
+024F   2???           00677     goto column
+                      00678     
+0250                  00679 number_high
+0250   ???? ????      00680     banksel number
+0252   1780           00681     bsf number,7
+0253   0008           00682     return
+                      00683    
+0254                  00684 hundreds
+0254   3064           00685     movlw d'100'
+0255   1283 1303      00686     banksel STATUS
+0257   1403           00687     bsf STATUS,0
+0258   ???? ????      00688     banksel number
+025A   02??           00689     subwf number,1
+025B   1283 1303      00690     banksel STATUS
+025D   1803           00691     btfsc STATUS,0
+Message[305]: Using default destination of 1 (file).
+025E   0A??           00692     incf hundreds_place
+025F   ???? ????      00693     pagesel hundreds
+0261   1803           00694     btfsc STATUS,0
+0262   2???           00695     goto hundreds
+0263   1903           00696     btfsc STATUS,2
+Message[305]: Using default destination of 1 (file).
+0264   0A??           00697     incf hundreds_place
+0265   ???? ????      00698     pagesel add_back
+0267   1D03           00699     btfss STATUS,2
+0268   2???           00700     call add_back
+0269   0008           00701     return
+                      00702   
+026A                  00703 tens
+026A   300A           00704     movlw d'10'
+026B   1283 1303      00705     banksel STATUS
+026D   1403           00706     bsf STATUS,0
+026E   ???? ????      00707     banksel number
+0270   02??           00708     subwf number,1
+0271   1283 1303      00709     banksel STATUS
+0273   1803           00710     btfsc STATUS,0
+Message[305]: Using default destination of 1 (file).
+0274   0A??           00711     incf tens_place
+0275   ???? ????      00712     pagesel tens
+0277   1803           00713     btfsc STATUS,0
+0278   2???           00714     goto tens
+0279   1903           00715     btfsc STATUS,2
+Message[305]: Using default destination of 1 (file).
+027A   0A??           00716     incf tens_place
+027B   ???? ????      00717     pagesel add_back
+027D   1D03           00718     btfss STATUS,2
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 15
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+027E   2???           00719     call add_back
+027F   0008           00720     return
+                      00721     
+0280                  00722 ones
+0280   3001           00723     movlw d'1'
+0281   1283 1303      00724     banksel STATUS
+0283   1403           00725     bsf STATUS,0
+0284   ???? ????      00726     banksel number
+0286   02??           00727     subwf number,1
+0287   1283 1303      00728     banksel STATUS
+0289   1803           00729     btfsc STATUS,0
+Message[305]: Using default destination of 1 (file).
+028A   0A??           00730     incf ones_place
+028B   ???? ????      00731     pagesel ones
+028D   1803           00732     btfsc STATUS,0
+028E   2???           00733     goto ones
+028F   1903           00734     btfsc STATUS,2
+Message[305]: Using default destination of 1 (file).
+0290   0A??           00735     incf ones_place
+0291   ???? ????      00736     pagesel add_back
+0293   1D03           00737     btfss STATUS,2
+0294   2???           00738     call add_back
+0295   0008           00739     return
+                      00740      
+0296                  00741 add_back
+0296   ???? ????      00742     banksel number
+Message[305]: Using default destination of 1 (file).
+0298   07??           00743     addwf number
+0299   0008           00744     return
+                      00745     
+                      00746      
+029A                  00747 rpm_write  
+029A   30C4           00748     movlw 0xC4
+029B   ???? ????      00749     banksel temp_wr
+029D   00??           00750     movwf temp_wr
+029E   ???? ????      00751     pagesel iwrite
+02A0   2???           00752     call iwrite
+02A1   08??           00753     movf hundreds_place,0
+02A2   00??           00754     movwf temp_wr
+02A3   3030           00755     movlw 0x30
+02A4   07??           00756     addwf temp_wr,1
+02A5   ???? ????      00757     pagesel dwrite
+02A7   2???           00758     call dwrite
+02A8   08??           00759     movf tens_place,0
+02A9   00??           00760     movwf temp_wr
+02AA   3030           00761     movlw 0x30
+02AB   07??           00762     addwf temp_wr,1
+02AC   ???? ????      00763     pagesel dwrite
+02AE   2???           00764     call dwrite
+02AF   08??           00765     movf ones_place,0
+02B0   00??           00766     movwf temp_wr
+02B1   3030           00767     movlw 0x30
+02B2   07??           00768     addwf temp_wr,1
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 16
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+02B3   ???? ????      00769     pagesel dwrite
+02B5   2???           00770     call dwrite
+02B6   302E           00771     movlw '.'
+02B7   00??           00772     movwf temp_wr
+02B8   ???? ????      00773     pagesel dwrite
+02BA   2???           00774     call dwrite
+02BB   08??           00775     movf decimal,0
+02BC   00??           00776     movwf temp_wr
+02BD   3030           00777     movlw 0x30
+02BE   07??           00778     addwf temp_wr,1
+02BF   ???? ????      00779     pagesel dwrite
+02C1   2???           00780     call dwrite
+02C2   ???? ????      00781     pagesel move_cursor
+02C4   2???           00782     call move_cursor
+02C5   0008           00783     return
+                      00784   
+02C6                  00785 move_cursor
+02C6   308E           00786     movlw 0x8E
+02C7   1C00           00787     btfss pos_count,0
+02C8   308D           00788     movlw 0x8D
+02C9   ???? ????      00789     banksel temp_wr
+02CB   00??           00790     movwf temp_wr
+02CC   ???? ????      00791     pagesel iwrite
+02CE   2???           00792     call iwrite
+02CF   0008           00793     return
+                      00794     
+02D0                  00795 keypad_table            ;subroutine is entered with index value in Wreg
+02D0   ???? ????      00796     banksel     count
+02D2   00??           00797     movwf       count
+02D3   ???? ????      00798     pageselw Key_Table ;Special assembly directive used 'pageselw' so that 
+                      00799                                                 ;all 5 upper bits are written. 
+                      00800                                                 ;Get the byte read and use it to
+02D5   30??           00801     movlw Key_Table    ;index into our jump table. If
+02D6   07??           00802     addwf count,w      ;we crossed a 256-byte boundary,
+02D7   1803           00803     btfsc STATUS,C                ;then increment PCLATH. Then load the
+02D8   0A8A           00804     incf PCLATH,f                 ;program counter with computed goto.
+02D9   0082           00805     movwf PCL
+02DA                  00806 Key_Table
+02DA   3431           00807         retlw   '1'     ;0
+02DB   3432           00808         retlw   '2'
+02DC   3433           00809         retlw   '3'
+02DD   3434           00810         retlw   '4'
+02DE   3435           00811         retlw   '5'
+02DF   3436           00812         retlw   '6'
+02E0   3437           00813         retlw   '7'
+02E1   3438           00814         retlw   '8'
+02E2   3439           00815         retlw   '9'
+02E3   3431           00816         retlw   '1' ;*
+02E4   3430           00817         retlw   '0'
+02E5   3432           00818         retlw   '2' ;#
+                      00819         
+02E6                  00820 Msg_Lookup              ;subroutine is entered with index value in Wreg
+02E6   ???? ????      00821     banksel     count
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 17
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+02E8   00??           00822     movwf       count
+02E9   ???? ????      00823     pageselw Msg_Table ;Special assembly directive used 'pageselw' so that 
+                      00824                                                 ;all 5 upper bits are written. 
+                      00825                                                 ;Get the byte read and use it to
+02EB   30??           00826     movlw Msg_Table    ;index into our jump table. If
+02EC   07??           00827     addwf count,w      ;we crossed a 256-byte boundary,
+02ED   1803           00828     btfsc STATUS,C                ;then increment PCLATH. Then load the
+02EE   0A8A           00829     incf PCLATH,f                 ;program counter with computed goto.
+02EF   0082           00830     movwf PCL
+02F0                  00831 Msg_Table
+02F0   3450           00832         retlw   'P'     ;0
+02F1   3465           00833         retlw   'e'     ;1
+02F2   3472           00834         retlw   'r'     ;2
+02F3   3463           00835         retlw   'c'     ;3
+02F4   3465           00836         retlw   'e'     ;4
+02F5   346E           00837         retlw   'n'     ;5
+02F6   3474           00838         retlw   't'     ;6
+02F7   3420           00839         retlw   ' '     ;7
+02F8   3464           00840         retlw   'd'     ;8
+02F9   3472           00841         retlw   'r'     ;9
+02FA   3469           00842         retlw   'i'     ;10
+02FB   3476           00843         retlw   'v'     ;11
+02FC   3465           00844         retlw   'e'     ;12
+02FD   3430           00845         retlw   '0'     ;13
+02FE   3430           00846         retlw   '0'     ;14
+02FF   3425           00847         retlw   '%'     ;15
+0300   3452           00848         retlw   'R'
+0301   3450           00849         retlw   'P'
+0302   344D           00850         retlw   'M'
+0303   343D           00851         retlw   '='
+0304   3430           00852         retlw   '0'
+0305   3430           00853         retlw   '0'
+0306   3430           00854         retlw   '0'
+0307   342E           00855         retlw   '.'
+0308   3430           00856         retlw   '0'
+0309   3400           00857         retlw   0       ;null character is a flag that the string is done
+                      00858         
+030A                  00859 delay_small             
+030A   30FF           00860     movlw D'255'
+030B   ???? ????      00861     banksel delcntr1
+030D   00??           00862     movwf delcntr1
+030E                  00863 dell            
+030E   0000           00864     nop
+030F   0000           00865     nop
+0310   0B??           00866     decfsz delcntr1,1
+0311   2???           00867     goto dell
+0312   0008           00868     return
+                      00869     
+0313                  00870 large_delay     
+0313   30FF           00871     movlw D'255'
+0314   ???? ????      00872     banksel delcntr2
+0316   00??           00873     movwf delcntr2
+0317                  00874 dell2           
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 18
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0317   ???? ????      00875     pagesel delay_small
+0319   2???           00876     call delay_small
+031A   ???? ????      00877     banksel delcntr2
+031C   ???? ????      00878     pagesel dell2
+031E   0B??           00879     decfsz delcntr2,1
+031F   2???           00880     goto dell2
+0320   0008           00881     return
+                      00882 
+0321   2???           00883     goto $
+3732                  00884     END                       ; directive 'end of program'
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 19
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+ACKDT                             00000005
+ACKEN                             00000004
+ACKSTAT                           00000006
+ADCON0                            0000001F
+ADCON1                            0000009F
+ADCS0                             00000006
+ADCS1                             00000007
+ADCS2                             00000006
+ADDEN                             00000003
+ADFM                              00000007
+ADIE                              00000006
+ADIF                              00000006
+ADON                              00000000
+ADRESH                            0000001E
+ADRESL                            0000009E
+BCLIE                             00000003
+BCLIF                             00000003
+BF                                00000000
+BRGH                              00000002
+C                                 00000000
+C1INV                             00000004
+C1OUT                             00000006
+C2INV                             00000005
+C2OUT                             00000007
+CCP1CON                           00000017
+CCP1IE                            00000002
+CCP1IF                            00000002
+CCP1M0                            00000000
+CCP1M1                            00000001
+CCP1M2                            00000002
+CCP1M3                            00000003
+CCP1X                             00000005
+CCP1Y                             00000004
+CCP2CON                           0000001D
+CCP2IE                            00000000
+CCP2IF                            00000000
+CCP2M0                            00000000
+CCP2M1                            00000001
+CCP2M2                            00000002
+CCP2M3                            00000003
+CCP2X                             00000005
+CCP2Y                             00000004
+CCPR1                             00000015
+CCPR1H                            00000016
+CCPR1L                            00000015
+CCPR2                             0000001B
+CCPR2H                            0000001C
+CCPR2L                            0000001B
+CHS0                              00000003
+CHS1                              00000004
+CHS2                              00000005
+CIS                               00000003
+CKE                               00000006
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 20
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+CKP                               00000004
+CM0                               00000000
+CM1                               00000001
+CM2                               00000002
+CMCON                             0000009C
+CMIE                              00000006
+CMIF                              00000006
+CREN                              00000004
+CSRC                              00000007
+CVR0                              00000000
+CVR1                              00000001
+CVR2                              00000002
+CVR3                              00000003
+CVRCON                            0000009D
+CVREN                             00000007
+CVROE                             00000006
+CVRR                              00000005
+D                                 00000005
+DATA_ADDRESS                      00000005
+DC                                00000001
+D_A                               00000005
+D_NOT_A                           00000005
+EEADR                             0000010D
+EEADRH                            0000010F
+EECON1                            0000018C
+EECON2                            0000018D
+EEDATA                            0000010C
+EEDATH                            0000010E
+EEIE                              00000004
+EEIF                              00000004
+EEPGD                             00000007
+ExitLoop                          0000002E
+F                                 00000001
+FERR                              00000002
+FSR                               00000004
+GCEN                              00000007
+GIE                               00000007
+GO                                00000002
+GO_DONE                           00000002
+GO_NOT_DONE                       00000002
+I2C_DATA                          00000005
+I2C_READ                          00000002
+I2C_START                         00000003
+I2C_STOP                          00000004
+IBF                               00000007
+IBOV                              00000005
+INDF                              00000000
+INTCON                            0000000B
+INTE                              00000004
+INTEDG                            00000006
+INTERRUPT                         00000004
+INTF                              00000001
+IRP                               00000007
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 21
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+Key_Table                         000002DA
+LCDInit                           00000000
+LCDLine_1                         00000000
+LCDLine_2                         00000000
+Msg_Lookup                        000002E6
+Msg_Table                         000002F0
+NOT_A                             00000005
+NOT_ADDRESS                       00000005
+NOT_BO                            00000000
+NOT_BOR                           00000000
+NOT_DONE                          00000002
+NOT_PD                            00000003
+NOT_POR                           00000001
+NOT_RBPU                          00000007
+NOT_RC8                           00000006
+NOT_T1SYNC                        00000002
+NOT_TO                            00000004
+NOT_TX8                           00000006
+NOT_W                             00000002
+NOT_WRITE                         00000002
+OBF                               00000006
+OERR                              00000001
+OPTION_REG                        00000081
+P                                 00000004
+PCFG0                             00000000
+PCFG1                             00000001
+PCFG2                             00000002
+PCFG3                             00000003
+PCL                               00000002
+PCLATH                            0000000A
+PCON                              0000008E
+PEIE                              00000006
+PEN                               00000002
+PIE1                              0000008C
+PIE2                              0000008D
+PIR1                              0000000C
+PIR2                              0000000D
+PORTA                             00000005
+PORTB                             00000006
+PORTC                             00000007
+PORTD                             00000008
+PORTE                             00000009
+PR2                               00000092
+PS0                               00000000
+PS1                               00000001
+PS2                               00000002
+PSA                               00000003
+PSPIE                             00000007
+PSPIF                             00000007
+PSPMODE                           00000004
+R                                 00000002
+RA0                               00000000
+RA1                               00000001
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 22
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+RA2                               00000002
+RA3                               00000003
+RA4                               00000004
+RA5                               00000005
+RB0                               00000000
+RB1                               00000001
+RB2                               00000002
+RB3                               00000003
+RB4                               00000004
+RB5                               00000005
+RB6                               00000006
+RB7                               00000007
+RBIE                              00000003
+RBIF                              00000000
+RC0                               00000000
+RC1                               00000001
+RC2                               00000002
+RC3                               00000003
+RC4                               00000004
+RC5                               00000005
+RC6                               00000006
+RC7                               00000007
+RC8_9                             00000006
+RC9                               00000006
+RCD8                              00000000
+RCEN                              00000003
+RCIE                              00000005
+RCIF                              00000005
+RCREG                             0000001A
+RCSTA                             00000018
+RD                                00000000
+RD0                               00000000
+RD1                               00000001
+RD2                               00000002
+RD3                               00000003
+RD4                               00000004
+RD5                               00000005
+RD6                               00000006
+RD7                               00000007
+RE0                               00000000
+RE1                               00000001
+RE2                               00000002
+READ_WRITE                        00000002
+RP0                               00000005
+RP1                               00000006
+RSEN                              00000001
+RX9                               00000006
+RX9D                              00000000
+R_NOT_W                           00000002
+R_W                               00000002
+S                                 00000003
+SEN                               00000000
+SMP                               00000007
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 23
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+SPBRG                             00000099
+SPEN                              00000007
+SREN                              00000005
+SSPADD                            00000093
+SSPBUF                            00000013
+SSPCON                            00000014
+SSPCON2                           00000091
+SSPEN                             00000005
+SSPIE                             00000003
+SSPIF                             00000003
+SSPM0                             00000000
+SSPM1                             00000001
+SSPM2                             00000002
+SSPM3                             00000003
+SSPOV                             00000006
+SSPSTAT                           00000094
+STATUS                            00000003
+SYNC                              00000004
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+T0SE                              00000004
+T1CKPS0                           00000004
+T1CKPS1                           00000005
+T1CON                             00000010
+T1INSYNC                          00000002
+T1OSCEN                           00000003
+T1SYNC                            00000002
+T2CKPS0                           00000000
+T2CKPS1                           00000001
+T2CON                             00000012
+TMR0                              00000001
+TMR0IE                            00000005
+TMR0IF                            00000002
+TMR1                              0000000E
+TMR1CS                            00000001
+TMR1H                             0000000F
+TMR1IE                            00000000
+TMR1IF                            00000000
+TMR1L                             0000000E
+TMR1ON                            00000000
+TMR2                              00000011
+TMR2IE                            00000001
+TMR2IF                            00000001
+TMR2ON                            00000002
+TOUTPS0                           00000003
+TOUTPS1                           00000004
+TOUTPS2                           00000005
+TOUTPS3                           00000006
+TRISA                             00000085
+TRISA0                            00000000
+TRISA1                            00000001
+TRISA2                            00000002
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 24
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+TRISA3                            00000003
+TRISA4                            00000004
+TRISA5                            00000005
+TRISB                             00000086
+TRISB0                            00000000
+TRISB1                            00000001
+TRISB2                            00000002
+TRISB3                            00000003
+TRISB4                            00000004
+TRISB5                            00000005
+TRISB6                            00000006
+TRISB7                            00000007
+TRISC                             00000087
+TRISC0                            00000000
+TRISC1                            00000001
+TRISC2                            00000002
+TRISC3                            00000003
+TRISC4                            00000004
+TRISC5                            00000005
+TRISC6                            00000006
+TRISC7                            00000007
+TRISD                             00000088
+TRISD0                            00000000
+TRISD1                            00000001
+TRISD2                            00000002
+TRISD3                            00000003
+TRISD4                            00000004
+TRISD5                            00000005
+TRISD6                            00000006
+TRISD7                            00000007
+TRISE                             00000089
+TRISE0                            00000000
+TRISE1                            00000001
+TRISE2                            00000002
+TRMT                              00000001
+TX8_9                             00000006
+TX9                               00000006
+TX9D                              00000000
+TXD8                              00000000
+TXEN                              00000005
+TXIE                              00000004
+TXIF                              00000004
+TXREG                             00000019
+TXSTA                             00000098
+UA                                00000001
+W                                 00000000
+WCOL                              00000007
+WR                                00000001
+WREN                              00000002
+WRERR                             00000003
+Z                                 00000002
+_BODEN_OFF                        00003FBF
+_BODEN_ON                         00003FFF
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 25
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_BOREN_OFF                        00003FBF
+_BOREN_ON                         00003FFF
+_CONFIG                           00002007
+_CPD_OFF                          00003FFF
+_CPD_ON                           00003EFF
+_CP_ALL                           00001FFF
+_CP_OFF                           00003FFF
+_CP_ON                            00001FFF
+_DEBUG_OFF                        00003FFF
+_DEBUG_ON                         000037FF
+_DEVID1                           00002006
+_FOSC_EXTRC                       00003FFF
+_FOSC_HS                          00003FFE
+_FOSC_LP                          00003FFC
+_FOSC_XT                          00003FFD
+_HS_OSC                           00003FFE
+_IDLOC0                           00002000
+_IDLOC1                           00002001
+_IDLOC2                           00002002
+_IDLOC3                           00002003
+_LP_OSC                           00003FFC
+_LVP_OFF                          00003F7F
+_LVP_ON                           00003FFF
+_MAIN_PROG_0321                   00000321
+_PWRTE_OFF                        00003FFF
+_PWRTE_ON                         00003FF7
+_RC_OSC                           00003FFF
+_WDTE_OFF                         00003FFB
+_WDTE_ON                          00003FFF
+_WDT_OFF                          00003FFB
+_WDT_ON                           00003FFF
+_WRT_1FOURTH                      00003BFF
+_WRT_256                          00003DFF
+_WRT_HALF                         000039FF
+_WRT_OFF                          00003FFF
+_XT_OSC                           00003FFD
+__16F877A                         00000001
+add_back                          00000296
+add_value                         0000000E
+col1                              000000A1
+col2                              000000A9
+col3                              000000B2
+col_flag                          00000001
+column                            00000059
+count                             00000000
+d_flag                            00000014
+decimal                           00000004
+del                               0000007D
+del_reset                         00000076
+delay                             0000006B
+delay_small                       0000030A
+delcntr1                          0000000F
+delcntr2                          00000010
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 26
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+dell                              0000030E
+dell2                             00000317
+dwrite                            00000000
+enter                             00000183
+flag                              00000000
+h_number                          00000011
+hundreds                          00000254
+hundreds_place                    00000005
+iwrite                            00000000
+keypad_table                      000002D0
+large_delay                       00000313
+lcd_write                         000001CB
+lcd_write0                        000001D7
+lcd_write_left                    000001D8
+lcd_write_right                   000001E4
+left_value                        0000000A
+left_value_multiply               0000000D
+loop                              00000013
+move_cursor                       000002C6
+multiply                          00000210
+multiply_counter                  0000000C
+multiply_loop                     0000021B
+number                            00000012
+number_high                       00000250
+number_hold                       00000006
+ones                              00000280
+ones_place                        00000007
+past_left_value                   0000000B
+past_right_value                  00000009
+pclath_temp                       00000002
+pos_count                         00000007
+r_loop                            000000C2
+right_value                       00000008
+row                               000000BB
+row1                              000000DD
+row2                              000000F7
+row3                              00000112
+row4                              0000012D
+row_flag                          00000002
+rpm                               00000225
+rpm_write                         0000029A
+run_motor                         00000000
+special_flag                      00000003
+special_press                     00000004
+star                              00000156
+start                             00000000
+status_temp                       00000001
+t_counter                         00000013
+temp_count                        00000005
+temp_wr                           00000000
+tens                              0000026A
+tens_place                        00000006
+total_up                          000001FC
+MPASM 5.84  /HOME/SAB/MPLABXPROJECTS/FINAL_P   12-9-2019  19:17:52         PAGE 27
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+total_value                       00000003
+val_temp                          00000000
+w_temp                            00000000
+wait1                             000001A8
+wait2                             000001AD
+wait3                             000001B2
+wait4                             000001B7
+wait5                             000001BC
+wait6                             000001C1
+wait7                             000001C6
+zero_write                        0000019D
+
+Errors   :     0
+Warnings :     0 reported,     0 suppressed
+Messages :    15 reported,     0 suppressed
+
+

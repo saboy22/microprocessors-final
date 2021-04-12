@@ -1,0 +1,4 @@
+Warning[207] ../motor.X/motor_run.asm 75 : Found label after column 1. (run_motor)
+Warning[205] ../motor.X/motor_run.asm 76 : Found directive in column 1. (banksel)
+Message[302] ../motor.X/motor_run.asm 83 : Register in operand not in bank 0.  Ensure that bank bits are correct.
+Message[302] ../motor.X/motor_run.asm 85 : Register in operand not in bank 0.  Ensure that bank bits are correct.

@@ -1,0 +1,1087 @@
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00001 ;**********************************************************************
+                      00002 ;   This file is a contains subroutines for the LCD display on        *
+                      00003 ;   the EXPLORER 8 board.                                             *
+                      00004 ;                                                                     *
+                      00005 ;                                                                     *
+                      00006 ;   The subroutines are:                                              *
+                      00007 ;               LCDInit -- initializes the LCD                        *
+                      00008 ;               iwrite  -- writes an instruction to the LCD           *
+                      00009 ;               dwrite  -- writes data to be displayed on the LCD     *
+                      00010 ;               LCDLine_1 -- selects first line of LCD                *
+                      00011 ;               LCDLine_2 -- selects second line of LCD               *
+                      00012 ;                                                                     *
+                      00013 ;   A variable - temp_wr is passed to iwrite and dwrite               *
+                      00014 ;                                                                     *
+                      00015 ;**********************************************************************
+                      00016 ;                                                                     *
+                      00017 ;   Resources used by this program                                    *
+                      00018 ;                RA2                                                  *
+                      00019 ;                RB5                                                  *
+                      00020 ;                RC3                                                  *
+                      00021 ;                RC4                                                  *
+                      00022 ;                RC5                                                  *
+                      00023 ;                                                                     *
+                      00024 ;**********************************************************************
+                      00025 ;                                                                     *
+                      00026 ;   LCDInit configures ADCON1 - PCFG<3:0> to b'0111' (all digital)    *
+                      00027 ;   If an A to D is required, channels AN3, AN1, An0 are available    *
+                      00028 ;   ADCON1 - PCFG<3:0> can be b'0100', b'0101', or b'1110' if an      *
+                      00029 ;   AtoD is required                                                  *
+                      00030 ;                                                                     *
+                      00031 ;**********************************************************************
+                      00032 ;   To Use the LCD                                                    *
+                      00033 ;       1) Call LCDInit                                             *
+                      00034 ;   To complete and instruction (see pg. 26-28 of LCD datasheet)            *
+                      00035 ;       2) Put instruction code (DB7-DB0) into temp_wr (see pg. 28)   *
+                      00036 ;       3) Call iwrite                                                *
+                      00037 ;   To write a character onto the LCD, move cursor (see 2))           *
+                      00038 ;       4) Put ASCII cope for desired character into temp_wr          *
+                      00039 ;       5) Call dwrite                                                *
+                      00040 ;   Refer to document 44780_display_driver                            *
+                      00041 ;                                                                     *
+                      00042 ;**********************************************************************
+                      00043 ;                                                                     *
+                      00044 ;   Note: This code assumes an 8MHz clock                             *
+                      00045 ;                                                                     *
+                      00046 ;**********************************************************************
+                      00047 ;                                                                     *
+                      00048 ;    Filename:      ex_8_display.asm                                  *
+                      00049 ;    Date:          10/30/2018                                        *
+                      00050 ;    File Version:  ver2                                              *
+                      00051 ;                                                                     *
+                      00052 ;    Author:        Geneva College                                    *
+                      00053 ;    Company:       Geneva College                                    *
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00054 ;                                                                     * 
+                      00055 ;                                                                     *
+                      00056 ;**********************************************************************
+                      00057 ;                                                                     *
+                      00058 ;    Files required: P16F877A.INC                                     *
+                      00059 ;                                                                     *
+                      00060 ;                                                                     *
+                      00061 ;                                                                     *
+                      00062 ;**********************************************************************
+                      00063 ;                                                                     *
+                      00064 ;    Notes:                                                           *
+                      00065 ;                                                                     *
+                      00066 ;                                                                     *
+                      00067 ;                                                                     *
+                      00068 ;                                                                     *
+                      00069 ;**********************************************************************
+                      00070 
+                      00071 
+                      00072     list        p=16f877a   ; list directive to define processor
+                      00073     #include    <p16f877a.inc>  ; processor specific variable definitions
+                      00001         LIST
+                      00002 
+                      00003 ;==========================================================================
+                      00004 ; Build date : Mar 17 2019
+                      00005 ;  MPASM PIC16F877A processor include
+                      00006 ; 
+                      00007 ;  (c) Copyright 1999-2019 Microchip Technology, All rights reserved
+                      00008 ;==========================================================================
+                      00009 
+                      00567         LIST
+                      00074     
+                      00075   ;__CONFIG _CP_OFF & _WDT_OFF & _BODEN_OFF & _PWRTE_OFF & _HS_OSC & _WRT_OFF & _LVP_OFF & _CPD_OFF
+                      00076 
+                      00077 ; '__CONFIG' directive is used to embed configuration data within .asm file.
+                      00078 ; The labels following the directive are located in the respective .inc file.
+                      00079 ; See respective data sheet for additional information on configuration word.
+                      00080 
+                      00081 ;***** VARIABLE DEFINITIONS
+                      00082 
+                      00083 ; example of using Shared Uninitialized Data Section
+                      00084 INT_VAR     UDATA_SHR      
+0000                  00085 temp_wr     RES     1       ; display data
+                      00086 
+  0000                00087             GLOBAL  temp_wr
+                      00088             
+                      00089 ; example of using Uninitialized Data Section
+                      00090 TEMP_VAR    UDATA           ; explicit address specified is not required
+0000                  00091 delcntr1    RES     1
+0001                  00092 delcntr2    RES     1
+0002                  00093 intcon_temp RES     1
+                      00094 
+                      00095 ;**********************************************************************
+                      00096 ;RESET_VECTOR    CODE    ;0x0000 ; processor reset vector
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00097 ;    nop                        ; nop for icd
+                      00098 ;    pagesel start
+                      00099 ;    goto    start              ; go to beginning of program
+                      00100 
+                      00101 MAIN_PROG       CODE
+                      00102 
+                      00103        ;Delay of 0.5ms approx. Instruction cycle time is 0.5us. Clock freq = 8 MHz
+0000   30C8           00104 delay5  movlw   D'200'  ;200 cycles called, each taking 5x0.5=2.5us
+0001   ???? ????      00105         banksel delcntr1
+0003   00??           00106         movwf   delcntr1
+0004   0000           00107 del1    nop                             ;1 inst. cycle
+0005   0000           00108         nop                             ;1 inst. cycle
+0006   0B??           00109         decfsz  delcntr1,1              ;1 inst. cycle, when no skip
+0007   2???           00110         goto    del1                    ;2 inst. cycles
+0008   0008           00111         return
+                      00112 
+0009                  00113 delayl  
+0009   3005           00114         movlw   0x05
+000A   ???? ????      00115         banksel delcntr2
+000C   00??           00116         movwf   delcntr2
+000D   0000           00117 del2    nop
+000E   ???? ????      00118         pagesel delay5
+0010   2???           00119         call delay5
+0011   ???? ????      00120         banksel delcntr2
+Message[305]: Using default destination of 1 (file).
+0013   0B??           00121         decfsz  delcntr2
+0014   2???           00122         goto del2
+0015   0008           00123         return
+                      00124         
+0016                  00125 iwrite                          ; instruction write to display
+0016   0000           00126         nop
+0017   1283 1303      00127         banksel PORTA
+0019   1105           00128         bcf     PORTA,0x02      ;CS* = 0  select MCP23S17
+001A   1283 1303      00129         banksel SSPBUF 
+001C   0813           00130         movf    SSPBUF,W        ; read SSPBUF to clear BF
+001D   3040           00131         movlw   b'01000000'     ; Device opcode MCP23S17
+001E   0093           00132         movwf   SSPBUF          ; start transmission
+001F   1683 1303      00133         banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0021   1C14           00134         btfss   SSPSTAT,BF      ; check for complete transmission
+0022   2???           00135         goto    $-1
+                      00136         
+0023   1283 1303      00137         banksel SSPBUF 
+0025   0813           00138         movf    SSPBUF,W        ; read SSPBUF to clear BF
+0026   3012           00139         movlw   b'00010010'     ; address for GPIOA
+0027   0093           00140         movwf   SSPBUF          ; start transmission
+0028   1683 1303      00141         banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+002A   1C14           00142         btfss   SSPSTAT,BF      ; check for complete transmission
+002B   2???           00143         goto    $-1
+                      00144     
+002C   1283 1303      00145         banksel SSPBUF 
+002E   0813           00146         movf    SSPBUF,W        ; read SSPBUF to clear BF
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+002F   3040           00147         movlw   b'01000000'     ; data for GPIOA - clear RS for instruction set E
+0030   0093           00148         movwf   SSPBUF          ; start transmission
+0031   1683 1303      00149         banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0033   1C14           00150         btfss   SSPSTAT,BF      ; check for complete transmission
+0034   2???           00151         goto    $-1
+                      00152         
+0035   1283 1303      00153         banksel SSPBUF
+0037   0813           00154         movf    SSPBUF,W        ; read SSPBUF to clear BF
+0038   08??           00155         movf    temp_wr,W       ; data for GPIOB - instruction
+0039   0093           00156         movwf   SSPBUF          ; start transmission
+003A   1683 1303      00157         banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+003C   1C14           00158         btfss   SSPSTAT,BF      ; check for complete transmission
+003D   2???           00159         goto    $-1
+                      00160         
+003E   1283 1303      00161         banksel SSPBUF 
+0040   0813           00162         movf    SSPBUF,W        ; read SSPBUF to clear BF
+0041   3000           00163         movlw   b'00000000'     ; data for GPIOA - clear E
+0042   0093           00164         movwf   SSPBUF          ; start transmission
+0043   1683 1303      00165         banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0045   1C14           00166         btfss   SSPSTAT,BF      ; check for complete transmission
+0046   2???           00167         goto    $-1
+                      00168         
+                      00169         
+0047   ???? ????      00170         pagesel delayl
+0049   2???           00171         call delayl             ; 2ms delay
+                      00172         
+004A   1283 1303      00173         banksel PORTA
+004C   1505           00174         bsf     PORTA,0x02      ;CS* = 1  deselect MCP23S1
+004D   0008           00175         return                  ; end instruction write
+                      00176         
+  0000                00177         GLOBAL iwrite
+                      00178         
+004E                  00179 dwrite                          ; data write to display
+004E   0000           00180         nop
+004F   1283 1303      00181         banksel PORTA
+0051   1105           00182         bcf     PORTA,0x02      ;CS* = 0  select MCP23S17
+0052   1283 1303      00183         banksel SSPBUF 
+0054   0813           00184         movf    SSPBUF,W        ; read SSPBUF to clear BF
+0055   3040           00185         movlw   b'01000000'     ; Device opcode MCP23S17
+0056   0093           00186         movwf   SSPBUF          ; start transmission
+0057   1683 1303      00187         banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0059   1C14           00188         btfss   SSPSTAT,BF      ; check for complete transmission
+005A   2???           00189         goto    $-1
+                      00190         
+005B   1283 1303      00191         banksel SSPBUF 
+005D   0813           00192         movf    SSPBUF,W        ; read SSPBUF to clear BF
+005E   3012           00193         movlw   b'00010010'     ; address for GPIOA
+005F   0093           00194         movwf   SSPBUF          ; start transmission
+0060   1683 1303      00195         banksel SSPSTAT
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0062   1C14           00196         btfss   SSPSTAT,BF      ; check for complete transmission
+0063   2???           00197         goto    $-1
+                      00198     
+0064   1283 1303      00199         banksel SSPBUF 
+0066   0813           00200         movf    SSPBUF,W        ; read SSPBUF to clear BF
+0067   30C0           00201         movlw   b'11000000'     ; data for GPIOA - set RS for character data - set E
+0068   0093           00202         movwf   SSPBUF          ; start transmission
+0069   1683 1303      00203         banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+006B   1C14           00204         btfss   SSPSTAT,BF      ; check for complete transmission
+006C   2???           00205         goto    $-1
+                      00206         
+006D   1283 1303      00207         banksel SSPBUF
+006F   0813           00208         movf    SSPBUF,W        ; read SSPBUF to clear BF
+0070   08??           00209         movf    temp_wr,W       ; data for GPIOB - character
+0071   0093           00210         movwf   SSPBUF          ; start transmission
+0072   1683 1303      00211         banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0074   1C14           00212         btfss   SSPSTAT,BF      ; check for complete transmission
+0075   2???           00213         goto    $-1
+                      00214         
+0076   1283 1303      00215         banksel SSPBUF 
+0078   0813           00216         movf    SSPBUF,W        ; read SSPBUF to clear BF
+0079   3080           00217         movlw   b'10000000'     ; clear E
+007A   0093           00218         movwf   SSPBUF          ; start transmission
+007B   1683 1303      00219         banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+007D   1C14           00220         btfss   SSPSTAT,BF      ; check for complete transmission
+007E   2???           00221         goto    $-1
+                      00222         
+007F   ???? ????      00223         pagesel delayl
+0081   2???           00224         call delayl             ; 2ms delay
+                      00225 
+                      00226         
+0082   1283 1303      00227         banksel PORTA
+0084   1505           00228         bsf     PORTA,0x02      ;CS* = 1  deselect MCP23S17
+                      00229                 
+0085   0008           00230         return                  ; end character write
+                      00231         
+  0000                00232         GLOBAL dwrite
+                      00233         
+0086                  00234 LCDLine_1
+0086   0000           00235         nop
+0087   ???? ????      00236         banksel temp_wr
+0089   3080           00237         movlw   0x80
+008A   00??           00238         movwf   temp_wr
+008B   ???? ????      00239         pagesel iwrite
+008D   2???           00240         call    iwrite
+008E   0008           00241         return
+                      00242         
+  0000                00243         GLOBAL  LCDLine_1
+                      00244         
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+008F                  00245 LCDLine_2
+008F   0000           00246         nop
+0090   ???? ????      00247         banksel temp_wr
+0092   30C0           00248         movlw   0xC0
+0093   00??           00249         movwf   temp_wr
+0094   ???? ????      00250         pagesel iwrite
+0096   2???           00251         call    iwrite
+0097   0008           00252         return
+                      00253         
+  0000                00254         GLOBAL  LCDLine_2       
+                      00255         
+0098                  00256 LCDInit
+                      00257 
+0098   0000           00258     nop             ; code starts here (example)
+0099   1683 1303      00259     banksel ADCON1  ; Set PORTA as digital I/O
+009B   3007           00260     movlw   0x07
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+009C   009F           00261     movwf   ADCON1
+009D   1283 1303      00262     banksel INTCON  ; save INTCON & dissable interupts
+009F   080B           00263     movf    INTCON,W
+00A0   ???? ????      00264     banksel intcon_temp
+00A2   00??           00265     movwf   intcon_temp
+00A3   1283 1303      00266     banksel INTCON
+00A5   018B           00267     clrf    INTCON
+                      00268     
+00A6   1683 1303      00269     banksel TRISA
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00A8   1105           00270     bcf     TRISA,0x02  ;CS*
+                      00271 ;    bsf            TRISA,0x05  ;SS*
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00A9   1286           00272     bcf     TRISB,0x05  ;RESET*
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00AA   1187           00273     bcf     TRISC,0x03  ;SCK
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00AB   1207           00274     bcf     TRISC,0x04  ;SDI
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00AC   1287           00275     bcf     TRISC,0x05  ;SI - SDO
+00AD   1683 1303      00276     banksel SSPSTAT     ;set up SPI
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00AF   1794           00277     bsf     SSPSTAT,SMP
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00B0   1714           00278     bsf     SSPSTAT,CKE
+00B1   1283 1303      00279     banksel SSPCON
+00B3   0194           00280     clrf    SSPCON
+00B4   3020           00281     movlw   0x20
+00B5   0094           00282     movwf   SSPCON
+00B6   1283 1303      00283     banksel PORTA
+00B8   1505           00284     bsf     PORTA,0x02  ; deselect MCP23S17
+00B9   1686           00285     bsf     PORTB,0x05  ; RESET* set high
+                      00286     
+                      00287     ;Configure MCP23S17
+00BA   1683 1303      00288     banksel SSPSTAT
+                      00289 
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00BC   0000           00290     nop
+00BD   1283 1303      00291     banksel SSPBUF
+00BF   1105           00292     bcf     PORTA,0x02  ;CS* = 0  select MCP23S17
+00C0   0813           00293     movf    SSPBUF,W    ; read SSPBUF to clear BF
+00C1   3040           00294     movlw   b'01000000' ;Device opcode MCP23S17
+00C2   0093           00295     movwf   SSPBUF      ; start transmission
+00C3   1683 1303      00296     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00C5   1C14           00297     btfss   SSPSTAT,BF  ; check for complete transmission
+00C6   2???           00298     goto    $-1
+                      00299     
+00C7   1283 1303      00300     banksel SSPBUF 
+00C9   0813           00301     movf    SSPBUF,W    ; read SSPBUF to clear BF
+00CA   3000           00302     movlw   b'00000000' ;register address IODRA
+00CB   0093           00303     movwf   SSPBUF      ; start transmission
+00CC   1683 1303      00304     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00CE   1C14           00305     btfss   SSPSTAT,BF  ; check for complete transmission
+00CF   2???           00306     goto    $-1
+                      00307     
+00D0   1283 1303      00308     banksel SSPBUF
+00D2   0813           00309     movf    SSPBUF,W    ; read SSPBUF to clear BF
+00D3   3000           00310     movlw   b'00000000' ; data for IODRA
+00D4   0093           00311     movwf   SSPBUF      ; start transmission
+00D5   1683 1303      00312     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00D7   1C14           00313     btfss   SSPSTAT,BF  ; check for complete transmission
+00D8   2???           00314     goto    $-1
+                      00315     
+00D9   1283 1303      00316     banksel SSPBUF
+00DB   0813           00317     movf    SSPBUF,W    ; read SSPBUF to clear BF
+00DC   3000           00318     movlw   b'00000000' ; data for IODRB
+00DD   0093           00319     movwf   SSPBUF      ; start transmission
+00DE   1683 1303      00320     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00E0   1C14           00321     btfss   SSPSTAT,BF  ; check for complete transmission
+00E1   2???           00322     goto    $-1
+                      00323     
+00E2   1283 1303      00324     banksel SSPBUF
+00E4   0813           00325     movf    SSPBUF,W    ; read SSPBUF to clear BF
+00E5   3000           00326     movlw   b'00000000' ; data for IPOLA
+00E6   0093           00327     movwf   SSPBUF      ; start transmission
+00E7   1683 1303      00328     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00E9   1C14           00329     btfss   SSPSTAT,BF  ; check for complete transmission
+00EA   2???           00330     goto    $-1
+                      00331     
+00EB   1283 1303      00332     banksel SSPBUF
+00ED   0813           00333     movf    SSPBUF,W    ; read SSPBUF to clear BF
+00EE   3000           00334     movlw   b'00000000' ; data for IPOLB
+00EF   0093           00335     movwf   SSPBUF      ; start transmission
+00F0   1683 1303      00336     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00F2   1C14           00337     btfss   SSPSTAT,BF  ; check for complete transmission
+00F3   2???           00338     goto    $-1
+                      00339     
+00F4   1283 1303      00340     banksel SSPBUF
+00F6   0813           00341     movf    SSPBUF,W    ; read SSPBUF to clear BF
+00F7   3000           00342     movlw   b'00000000' ; data for GPINTENA
+00F8   0093           00343     movwf   SSPBUF      ; start transmission
+00F9   1683 1303      00344     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+00FB   1C14           00345     btfss   SSPSTAT,BF  ; check for complete transmission
+00FC   2???           00346     goto    $-1
+                      00347     
+00FD   1283 1303      00348     banksel SSPBUF
+00FF   0813           00349     movf    SSPBUF,W    ; read SSPBUF to clear BF
+0100   3000           00350     movlw   b'00000000' ; data for GPINTENB
+0101   0093           00351     movwf   SSPBUF      ; start transmission
+0102   1683 1303      00352     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0104   1C14           00353     btfss   SSPSTAT,BF  ; check for complete transmission
+0105   2???           00354     goto    $-1   
+                      00355     
+0106   1283 1303      00356     banksel PORTA
+0108   1505           00357     bsf     PORTA,0x02  ; deselect MCP23S17   
+                      00358     
+0109   2???           00359     call delay5
+010A   0000           00360     nop
+                      00361     
+010B   1283 1303      00362     banksel PORTA
+010D   1105           00363     bcf     PORTA,0x02  ; select MCP23S17
+                      00364     
+010E   1683 1303      00365     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0110   1C14           00366     btfss   SSPSTAT,BF  ; check for complete transmissio
+0111   2???           00367     goto    $-1
+                      00368     
+0112   1283 1303      00369     banksel SSPBUF
+0114   0813           00370     movf    SSPBUF,W    ; read SSPBUF to clear BF
+0115   3040           00371     movlw   b'01000000' ;Device opcode MCP23S17
+0116   0093           00372     movwf   SSPBUF      ; start transmission
+0117   1683 1303      00373     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0119   1C14           00374     btfss   SSPSTAT,BF  ; check for complete transmission
+011A   2???           00375     goto    $-1
+                      00376     
+011B   1283 1303      00377     banksel SSPBUF
+011D   0813           00378     movf    SSPBUF,W    ; read SSPBUF to clear BF   
+011E   300C           00379     movlw   b'00001100' ; address for GPPUA
+011F   0093           00380     movwf   SSPBUF      ; start transmission   
+0120   1683 1303      00381     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0122   1C14           00382     btfss   SSPSTAT,BF  ; check for complete transmission
+0123   2???           00383     goto    $-1
+                      00384     
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0124   1283 1303      00385     banksel SSPBUF
+0126   0813           00386     movf    SSPBUF,W    ; read SSPBUF to clear BF   
+0127   3000           00387     movlw   b'00000000' ; data for GPPUA
+0128   0093           00388     movwf   SSPBUF      ; start transmission   
+0129   1683 1303      00389     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+012B   1C14           00390     btfss   SSPSTAT,BF  ; check for complete transmission
+012C   2???           00391     goto    $-1    
+                      00392 
+012D   1283 1303      00393     banksel SSPBUF
+012F   0813           00394     movf    SSPBUF,W    ; read SSPBUF to clear BF   
+0130   3000           00395     movlw   b'00000000' ; data for GPPUB
+0131   0093           00396     movwf   SSPBUF      ; start transmission   
+0132   1683 1303      00397     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0134   1C14           00398     btfss   SSPSTAT,BF  ; check for complete transmission
+0135   2???           00399     goto    $-1   
+                      00400     
+0136   1283 1303      00401     banksel PORTA
+0138   1505           00402     bsf     PORTA,0x02  ; deselect MCP23S17 
+                      00403     
+0139   2???           00404     call delay5
+013A   0000           00405     nop
+                      00406     
+013B   1283 1303      00407     banksel PORTA
+013D   1105           00408     bcf     PORTA,0x02  ; select MCP23S17
+                      00409     
+013E   1683 1303      00410     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0140   1C14           00411     btfss   SSPSTAT,BF  ; check for complete transmissio
+0141   2???           00412     goto    $-1
+                      00413     
+0142   1283 1303      00414     banksel SSPBUF
+0144   0813           00415     movf    SSPBUF,W    ; read SSPBUF to clear BF
+0145   3040           00416     movlw   b'01000000' ;Device opcode MCP23S17
+0146   0093           00417     movwf   SSPBUF      ; start transmission
+0147   1683 1303      00418     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0149   1C14           00419     btfss   SSPSTAT,BF  ; check for complete transmission
+014A   2???           00420     goto    $-1  
+                      00421     
+014B   1283 1303      00422     banksel SSPBUF
+014D   0813           00423     movf    SSPBUF,W    ; read SSPBUF to clear BF
+014E   300A           00424     movlw   b'00001010' ; address for IOCON
+014F   0093           00425     movwf   SSPBUF      ; start transmission
+0150   1683 1303      00426     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0152   1C14           00427     btfss   SSPSTAT,BF  ; check for complete transmission
+0153   2???           00428     goto    $-1
+                      00429     
+0154   1283 1303      00430     banksel SSPBUF
+0156   0813           00431     movf    SSPBUF,W    ; read SSPBUF to clear BF
+0157   3038           00432     movlw   b'00111000' ; data for IOCON
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0158   0093           00433     movwf   SSPBUF      ; start transmission
+0159   1683 1303      00434     banksel SSPSTAT
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+015B   1C14           00435     btfss   SSPSTAT,BF  ; check for complete transmission
+015C   2???           00436     goto    $-1
+                      00437     
+015D   1283 1303      00438     banksel PORTA
+015F   1505           00439     bsf     PORTA,0x02  ; deselect MCP23S17 
+                      00440     
+                      00441     ; end config of MCP23S17
+                      00442     ; begin disdlay init
+0160   2???           00443     call delay5         ; 2ms delay
+0161   2???           00444     call delay5
+0162   2???           00445     call delay5
+0163   2???           00446     call delay5
+                      00447     
+0164   ???? ????      00448     banksel temp_wr
+0166   3030           00449     movlw   b'00110000' ; set up for 8bit
+0167   00??           00450     movwf   temp_wr
+0168   2???           00451     call    iwrite
+                      00452     
+0169   2???           00453     call delay5         ; delay more than 4.1ms
+016A   2???           00454     call delay5
+016B   2???           00455     call delay5
+016C   2???           00456     call delay5
+016D   2???           00457     call delay5
+                      00458 
+016E   ???? ????      00459     banksel temp_wr
+0170   3030           00460     movlw   b'00110000' ; set up for 8bit again
+0171   00??           00461     movwf   temp_wr    
+0172   2???           00462     call    iwrite
+                      00463     
+0173   2???           00464     call    delay5      ; delay more than 100us
+                      00465     
+0174   ???? ????      00466     banksel temp_wr
+0176   3030           00467     movlw   b'00110000' ; set up for 8bit again
+0177   00??           00468     movwf   temp_wr    
+0178   2???           00469     call    iwrite    
+                      00470     
+0179   ???? ????      00471     banksel temp_wr
+017B   3038           00472     movlw   b'00111000' ; set up for 8bit, 2 lines, 5x7 dots
+017C   00??           00473     movwf   temp_wr    
+017D   2???           00474     call    iwrite
+                      00475     
+017E   ???? ????      00476     banksel temp_wr
+0180   3008           00477     movlw   b'00001000' ; set up for display off,cursor off, blink off
+0181   00??           00478     movwf   temp_wr    
+0182   2???           00479     call    iwrite   
+                      00480     
+0183   ???? ????      00481     banksel temp_wr
+0185   3001           00482     movlw   b'00000001' ; clear display & return to position 0
+0186   00??           00483     movwf   temp_wr    
+0187   2???           00484     call    iwrite
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 11
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00485     
+0188   ???? ????      00486     banksel temp_wr
+018A   3006           00487     movlw   b'00000110' ; increment display, shift off
+018B   00??           00488     movwf   temp_wr    
+018C   2???           00489     call    iwrite
+                      00490     ; done config display
+                      00491     
+018D   ???? ????      00492     banksel intcon_temp  ; restore interupts
+018F   08??           00493     movf    intcon_temp,W
+0190   1283 1303      00494     banksel INTCON
+0192   008B           00495     movwf   INTCON   
+                      00496     
+0193   0008           00497     return              
+                      00498     
+  0000                00499     GLOBAL LCDInit
+                      00500     
+                      00501 ; remaining code goes here
+                      00502 ;start
+                      00503 ;    nop
+                      00504 ;    pagesel LCDInit
+                      00505 ;    call LCDInit
+                      00506 ;    nop
+                      00507 ;    movlw   b'00000011'  ;cursor to 0
+                      00508 ;    movwf   temp_wr
+                      00509 ;    pagesel iwrite
+                      00510 ;    call iwrite
+                      00511 
+                      00512 ;    movlw   b'00001110'  ;display on, cursor on, blink off
+                      00513 ;    movwf   temp_wr
+                      00514 ;    call iwrite
+                      00515     
+                      00516 ;    movlw   b'00000110'  ;cursor increment, shift off
+                      00517 ;    movwf   temp_wr
+                      00518 ;    call iwrite    
+                      00519   
+                      00520 ;    movlw   b'01001111'  ;  O
+                      00521 ;    movwf   temp_wr
+                      00522 ;    pagesel dwrite
+                      00523 ;    call dwrite   
+                      00524     
+                      00525 ;    movlw   b'01001011'  ; K
+                      00526 ;    movwf   temp_wr
+                      00527 ;    call dwrite 
+                      00528 
+                      00529 ;    movlw   b'01001011'  ; K
+                      00530 ;    movwf   temp_wr
+                      00531 ;    call dwrite 
+                      00532     
+                      00533 ;    nop
+                      00534 ;    goto $-1
+                      00535     END                       ; directive 'end of program'
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 12
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+ACKDT                             00000005
+ACKEN                             00000004
+ACKSTAT                           00000006
+ADCON0                            0000001F
+ADCON1                            0000009F
+ADCS0                             00000006
+ADCS1                             00000007
+ADCS2                             00000006
+ADDEN                             00000003
+ADFM                              00000007
+ADIE                              00000006
+ADIF                              00000006
+ADON                              00000000
+ADRESH                            0000001E
+ADRESL                            0000009E
+BCLIE                             00000003
+BCLIF                             00000003
+BF                                00000000
+BRGH                              00000002
+C                                 00000000
+C1INV                             00000004
+C1OUT                             00000006
+C2INV                             00000005
+C2OUT                             00000007
+CCP1CON                           00000017
+CCP1IE                            00000002
+CCP1IF                            00000002
+CCP1M0                            00000000
+CCP1M1                            00000001
+CCP1M2                            00000002
+CCP1M3                            00000003
+CCP1X                             00000005
+CCP1Y                             00000004
+CCP2CON                           0000001D
+CCP2IE                            00000000
+CCP2IF                            00000000
+CCP2M0                            00000000
+CCP2M1                            00000001
+CCP2M2                            00000002
+CCP2M3                            00000003
+CCP2X                             00000005
+CCP2Y                             00000004
+CCPR1                             00000015
+CCPR1H                            00000016
+CCPR1L                            00000015
+CCPR2                             0000001B
+CCPR2H                            0000001C
+CCPR2L                            0000001B
+CHS0                              00000003
+CHS1                              00000004
+CHS2                              00000005
+CIS                               00000003
+CKE                               00000006
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 13
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+CKP                               00000004
+CM0                               00000000
+CM1                               00000001
+CM2                               00000002
+CMCON                             0000009C
+CMIE                              00000006
+CMIF                              00000006
+CREN                              00000004
+CSRC                              00000007
+CVR0                              00000000
+CVR1                              00000001
+CVR2                              00000002
+CVR3                              00000003
+CVRCON                            0000009D
+CVREN                             00000007
+CVROE                             00000006
+CVRR                              00000005
+D                                 00000005
+DATA_ADDRESS                      00000005
+DC                                00000001
+D_A                               00000005
+D_NOT_A                           00000005
+EEADR                             0000010D
+EEADRH                            0000010F
+EECON1                            0000018C
+EECON2                            0000018D
+EEDATA                            0000010C
+EEDATH                            0000010E
+EEIE                              00000004
+EEIF                              00000004
+EEPGD                             00000007
+F                                 00000001
+FERR                              00000002
+FSR                               00000004
+GCEN                              00000007
+GIE                               00000007
+GO                                00000002
+GO_DONE                           00000002
+GO_NOT_DONE                       00000002
+I2C_DATA                          00000005
+I2C_READ                          00000002
+I2C_START                         00000003
+I2C_STOP                          00000004
+IBF                               00000007
+IBOV                              00000005
+INDF                              00000000
+INTCON                            0000000B
+INTE                              00000004
+INTEDG                            00000006
+INTF                              00000001
+IRP                               00000007
+LCDInit                           00000098
+LCDLine_1                         00000086
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 14
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+LCDLine_2                         0000008F
+NOT_A                             00000005
+NOT_ADDRESS                       00000005
+NOT_BO                            00000000
+NOT_BOR                           00000000
+NOT_DONE                          00000002
+NOT_PD                            00000003
+NOT_POR                           00000001
+NOT_RBPU                          00000007
+NOT_RC8                           00000006
+NOT_T1SYNC                        00000002
+NOT_TO                            00000004
+NOT_TX8                           00000006
+NOT_W                             00000002
+NOT_WRITE                         00000002
+OBF                               00000006
+OERR                              00000001
+OPTION_REG                        00000081
+P                                 00000004
+PCFG0                             00000000
+PCFG1                             00000001
+PCFG2                             00000002
+PCFG3                             00000003
+PCL                               00000002
+PCLATH                            0000000A
+PCON                              0000008E
+PEIE                              00000006
+PEN                               00000002
+PIE1                              0000008C
+PIE2                              0000008D
+PIR1                              0000000C
+PIR2                              0000000D
+PORTA                             00000005
+PORTB                             00000006
+PORTC                             00000007
+PORTD                             00000008
+PORTE                             00000009
+PR2                               00000092
+PS0                               00000000
+PS1                               00000001
+PS2                               00000002
+PSA                               00000003
+PSPIE                             00000007
+PSPIF                             00000007
+PSPMODE                           00000004
+R                                 00000002
+RA0                               00000000
+RA1                               00000001
+RA2                               00000002
+RA3                               00000003
+RA4                               00000004
+RA5                               00000005
+RB0                               00000000
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 15
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+RB1                               00000001
+RB2                               00000002
+RB3                               00000003
+RB4                               00000004
+RB5                               00000005
+RB6                               00000006
+RB7                               00000007
+RBIE                              00000003
+RBIF                              00000000
+RC0                               00000000
+RC1                               00000001
+RC2                               00000002
+RC3                               00000003
+RC4                               00000004
+RC5                               00000005
+RC6                               00000006
+RC7                               00000007
+RC8_9                             00000006
+RC9                               00000006
+RCD8                              00000000
+RCEN                              00000003
+RCIE                              00000005
+RCIF                              00000005
+RCREG                             0000001A
+RCSTA                             00000018
+RD                                00000000
+RD0                               00000000
+RD1                               00000001
+RD2                               00000002
+RD3                               00000003
+RD4                               00000004
+RD5                               00000005
+RD6                               00000006
+RD7                               00000007
+RE0                               00000000
+RE1                               00000001
+RE2                               00000002
+READ_WRITE                        00000002
+RP0                               00000005
+RP1                               00000006
+RSEN                              00000001
+RX9                               00000006
+RX9D                              00000000
+R_NOT_W                           00000002
+R_W                               00000002
+S                                 00000003
+SEN                               00000000
+SMP                               00000007
+SPBRG                             00000099
+SPEN                              00000007
+SREN                              00000005
+SSPADD                            00000093
+SSPBUF                            00000013
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 16
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+SSPCON                            00000014
+SSPCON2                           00000091
+SSPEN                             00000005
+SSPIE                             00000003
+SSPIF                             00000003
+SSPM0                             00000000
+SSPM1                             00000001
+SSPM2                             00000002
+SSPM3                             00000003
+SSPOV                             00000006
+SSPSTAT                           00000094
+STATUS                            00000003
+SYNC                              00000004
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+T0SE                              00000004
+T1CKPS0                           00000004
+T1CKPS1                           00000005
+T1CON                             00000010
+T1INSYNC                          00000002
+T1OSCEN                           00000003
+T1SYNC                            00000002
+T2CKPS0                           00000000
+T2CKPS1                           00000001
+T2CON                             00000012
+TMR0                              00000001
+TMR0IE                            00000005
+TMR0IF                            00000002
+TMR1                              0000000E
+TMR1CS                            00000001
+TMR1H                             0000000F
+TMR1IE                            00000000
+TMR1IF                            00000000
+TMR1L                             0000000E
+TMR1ON                            00000000
+TMR2                              00000011
+TMR2IE                            00000001
+TMR2IF                            00000001
+TMR2ON                            00000002
+TOUTPS0                           00000003
+TOUTPS1                           00000004
+TOUTPS2                           00000005
+TOUTPS3                           00000006
+TRISA                             00000085
+TRISA0                            00000000
+TRISA1                            00000001
+TRISA2                            00000002
+TRISA3                            00000003
+TRISA4                            00000004
+TRISA5                            00000005
+TRISB                             00000086
+TRISB0                            00000000
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 17
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+TRISB1                            00000001
+TRISB2                            00000002
+TRISB3                            00000003
+TRISB4                            00000004
+TRISB5                            00000005
+TRISB6                            00000006
+TRISB7                            00000007
+TRISC                             00000087
+TRISC0                            00000000
+TRISC1                            00000001
+TRISC2                            00000002
+TRISC3                            00000003
+TRISC4                            00000004
+TRISC5                            00000005
+TRISC6                            00000006
+TRISC7                            00000007
+TRISD                             00000088
+TRISD0                            00000000
+TRISD1                            00000001
+TRISD2                            00000002
+TRISD3                            00000003
+TRISD4                            00000004
+TRISD5                            00000005
+TRISD6                            00000006
+TRISD7                            00000007
+TRISE                             00000089
+TRISE0                            00000000
+TRISE1                            00000001
+TRISE2                            00000002
+TRMT                              00000001
+TX8_9                             00000006
+TX9                               00000006
+TX9D                              00000000
+TXD8                              00000000
+TXEN                              00000005
+TXIE                              00000004
+TXIF                              00000004
+TXREG                             00000019
+TXSTA                             00000098
+UA                                00000001
+W                                 00000000
+WCOL                              00000007
+WR                                00000001
+WREN                              00000002
+WRERR                             00000003
+Z                                 00000002
+_BODEN_OFF                        00003FBF
+_BODEN_ON                         00003FFF
+_BOREN_OFF                        00003FBF
+_BOREN_ON                         00003FFF
+_CONFIG                           00002007
+_CPD_OFF                          00003FFF
+_CPD_ON                           00003EFF
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 18
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_CP_ALL                           00001FFF
+_CP_OFF                           00003FFF
+_CP_ON                            00001FFF
+_DEBUG_OFF                        00003FFF
+_DEBUG_ON                         000037FF
+_DEVID1                           00002006
+_FOSC_EXTRC                       00003FFF
+_FOSC_HS                          00003FFE
+_FOSC_LP                          00003FFC
+_FOSC_XT                          00003FFD
+_HS_OSC                           00003FFE
+_IDLOC0                           00002000
+_IDLOC1                           00002001
+_IDLOC2                           00002002
+_IDLOC3                           00002003
+_LP_OSC                           00003FFC
+_LVP_OFF                          00003F7F
+_LVP_ON                           00003FFF
+_MAIN_PROG_0022                   00000022
+_MAIN_PROG_002B                   0000002B
+_MAIN_PROG_0034                   00000034
+_MAIN_PROG_003D                   0000003D
+_MAIN_PROG_0046                   00000046
+_MAIN_PROG_005A                   0000005A
+_MAIN_PROG_0063                   00000063
+_MAIN_PROG_006C                   0000006C
+_MAIN_PROG_0075                   00000075
+_MAIN_PROG_007E                   0000007E
+_MAIN_PROG_00C6                   000000C6
+_MAIN_PROG_00CF                   000000CF
+_MAIN_PROG_00D8                   000000D8
+_MAIN_PROG_00E1                   000000E1
+_MAIN_PROG_00EA                   000000EA
+_MAIN_PROG_00F3                   000000F3
+_MAIN_PROG_00FC                   000000FC
+_MAIN_PROG_0105                   00000105
+_MAIN_PROG_0111                   00000111
+_MAIN_PROG_011A                   0000011A
+_MAIN_PROG_0123                   00000123
+_MAIN_PROG_012C                   0000012C
+_MAIN_PROG_0135                   00000135
+_MAIN_PROG_0141                   00000141
+_MAIN_PROG_014A                   0000014A
+_MAIN_PROG_0153                   00000153
+_MAIN_PROG_015C                   0000015C
+_PWRTE_OFF                        00003FFF
+_PWRTE_ON                         00003FF7
+_RC_OSC                           00003FFF
+_WDTE_OFF                         00003FFB
+_WDTE_ON                          00003FFF
+_WDT_OFF                          00003FFB
+_WDT_ON                           00003FFF
+_WRT_1FOURTH                      00003BFF
+MPASM 5.84  ../../DOCUMENTS/MICROPROCESSORS/   12-7-2019  17:12:31         PAGE 19
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_WRT_256                          00003DFF
+_WRT_HALF                         000039FF
+_WRT_OFF                          00003FFF
+_XT_OSC                           00003FFD
+__16F877A                         00000001
+del1                              00000004
+del2                              0000000D
+delay5                            00000000
+delayl                            00000009
+delcntr1                          00000000
+delcntr2                          00000001
+dwrite                            0000004E
+intcon_temp                       00000002
+iwrite                            00000016
+temp_wr                           00000000
+
+Errors   :     0
+Warnings :     0 reported,     0 suppressed
+Messages :    36 reported,     0 suppressed
+
+
